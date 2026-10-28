@@ -1,0 +1,51 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // Default deny all access
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Role-based privilege check: Checks custom claims, admin/examiner document existence, or root admin email
+    function isStaff() {
+      return isSignedIn() && (
+        request.auth.token.role in ['admin', 'examiner'] ||
+        request.auth.token.admin == true ||
+        firestore.exists(/databases/(default)/documents/admins/$(request.auth.uid)) ||
+        firestore.exists(/databases/(default)/documents/examiners/$(request.auth.uid)) ||
+        request.auth.token.email == 'farhodjonovichm1301@gmail.com'
+      );
+    }
+
+    // 1. Confidential Exam Answer Keys (Examiners & Administrators ONLY)
+    // Candidates are STRICTLY DENIED read and write access
+    match /exam_answer_keys/{allPaths=**} {
+      allow read, write: if isStaff();
+    }
+
+    // 2. Draft & Staging Examination Media
+    // Unpublished materials in preparation must NOT be readable by candidates
+    match /exam_resources/drafts/{allPaths=**} {
+      allow read, write: if isStaff();
+    }
+
+    // 3. Published Examination Audio & Stimulus Media
+    // Authenticated candidates may only read audio assets belonging to a published exam package
+    match /exam_resources/{packageId}/{fileName} {
+      // Authorized staff can upload, modify, or delete media
+      allow write: if isStaff();
+      
+      // Candidate read access is strictly conditional on the exam package status in Cloud Firestore
+      allow read: if isStaff() || (
+        isSignedIn() &&
+        firestore.get(/databases/(default)/documents/exam_resources/$(packageId)).data.status == 'published'
+      );
+    }
+  }
+}

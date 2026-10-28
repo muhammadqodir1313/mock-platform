@@ -1,0 +1,355 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Registered candidate or examiner profile",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "User unique identifier matching auth UID",
+          "maxLength": 128
+        },
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth User UID",
+          "maxLength": 128
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "User email address",
+          "maxLength": 256
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Candidate or examiner full name",
+          "maxLength": 120
+        },
+        "role": {
+          "type": "string",
+          "description": "Access control role",
+          "enum": ["candidate", "examiner", "admin"]
+        },
+        "targetBand": {
+          "type": "string",
+          "description": "Candidate IELTS target band score",
+          "maxLength": 10
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Account registration timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Account profile update timestamp"
+        }
+      },
+      "required": ["id", "email", "displayName", "role", "createdAt"]
+    },
+    "Booking": {
+      "title": "Booking",
+      "description": "Offline in-person CD IELTS mock exam workstation reservation",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique booking identifier",
+          "maxLength": 128
+        },
+        "candidateId": {
+          "type": "string",
+          "description": "User identifier who created this reservation",
+          "maxLength": 128
+        },
+        "fullName": {
+          "type": "string",
+          "description": "Candidate full name as on passport",
+          "maxLength": 120
+        },
+        "phone": {
+          "type": "string",
+          "description": "Contact phone number for SMS and Telegram alerts",
+          "maxLength": 30
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "Candidate email for digital TRF delivery",
+          "maxLength": 256
+        },
+        "module": {
+          "type": "string",
+          "description": "IELTS module: Academic or General Training",
+          "enum": ["Academic", "General Training"]
+        },
+        "preferredDate": {
+          "type": "string",
+          "description": "Scheduled exam session date and time",
+          "maxLength": 120
+        },
+        "referenceCode": {
+          "type": "string",
+          "description": "Human-readable mock confirmation reference code",
+          "maxLength": 40
+        },
+        "status": {
+          "type": "string",
+          "description": "Booking status",
+          "enum": ["confirmed", "cancelled", "completed"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when booking was made"
+        }
+      },
+      "required": ["id", "candidateId", "fullName", "phone", "email", "module", "preferredDate", "referenceCode", "status", "createdAt"]
+    },
+    "TestAttempt": {
+      "title": "TestAttempt",
+      "description": "Online or offline mock exam attempt",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique attempt identifier",
+          "maxLength": 128
+        },
+        "candidateId": {
+          "type": "string",
+          "description": "User identifier who took the exam",
+          "maxLength": 128
+        },
+        "module": {
+          "type": "string",
+          "description": "IELTS test module",
+          "enum": ["Academic", "General Training"]
+        },
+        "testType": {
+          "type": "string",
+          "description": "Delivery format",
+          "enum": ["online", "offline"]
+        },
+        "status": {
+          "type": "string",
+          "description": "Attempt status",
+          "enum": ["in_progress", "completed", "graded"]
+        },
+        "answers": {
+          "type": "object",
+          "description": "Candidate responses for questions"
+        },
+        "rawListeningScore": {
+          "type": "number",
+          "description": "Listening raw marks out of 40"
+        },
+        "rawReadingScore": {
+          "type": "number",
+          "description": "Reading raw marks out of 40"
+        },
+        "overallBand": {
+          "type": "number",
+          "description": "Estimated or verified overall band score"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Session start timestamp"
+        },
+        "completedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Session completion timestamp"
+        }
+      },
+      "required": ["id", "candidateId", "module", "testType", "status", "createdAt"]
+    },
+    "DiagnosticTRF": {
+      "title": "DiagnosticTRF",
+      "description": "Comprehensive Test Report Form with 4-criterion band diagnostics",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "TRF certificate identifier",
+          "maxLength": 128
+        },
+        "attemptId": {
+          "type": "string",
+          "description": "Associated mock test attempt identifier",
+          "maxLength": 128
+        },
+        "candidateId": {
+          "type": "string",
+          "description": "Candidate recipient user ID",
+          "maxLength": 128
+        },
+        "overallBand": {
+          "type": "number",
+          "description": "Calculated overall band score (0.0 - 9.0)"
+        },
+        "listeningBand": {
+          "type": "number",
+          "description": "Listening band score"
+        },
+        "readingBand": {
+          "type": "number",
+          "description": "Reading band score"
+        },
+        "writingBand": {
+          "type": "number",
+          "description": "Writing band score"
+        },
+        "speakingBand": {
+          "type": "number",
+          "description": "Speaking band score"
+        },
+        "writingFeedback": {
+          "type": "string",
+          "description": "Examiner diagnostic notes across TR, CC, LR, GRA",
+          "maxLength": 4000
+        },
+        "speakingFeedback": {
+          "type": "string",
+          "description": "Examiner oral interview rubric evaluation notes",
+          "maxLength": 4000
+        },
+        "examinerEmail": {
+          "type": "string",
+          "description": "Examiner who marked the test",
+          "maxLength": 256
+        },
+        "issuedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "TRF release timestamp"
+        }
+      },
+      "required": ["id", "attemptId", "candidateId", "overallBand", "listeningBand", "readingBand", "writingBand", "speakingBand", "issuedAt"]
+    },
+    "ExamResource": {
+      "title": "ExamResource",
+      "description": "Candidate-facing mock exam stimulus package containing Listening audio/questions, Reading passages/questions, and Writing tasks (NO answer keys)",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Package unique identifier",
+          "maxLength": 128
+        },
+        "title": {
+          "type": "string",
+          "description": "Exam package display title",
+          "maxLength": 200
+        },
+        "module": {
+          "type": "string",
+          "description": "IELTS module: Academic or General Training",
+          "enum": ["Academic", "General Training"]
+        },
+        "version": {
+          "type": "string",
+          "description": "Version identifier",
+          "maxLength": 40
+        },
+        "status": {
+          "type": "string",
+          "description": "Publication workflow status",
+          "enum": ["draft", "review", "published", "archived"]
+        },
+        "listening": {
+          "type": "object",
+          "description": "Listening module audio source, sections, and questions"
+        },
+        "reading": {
+          "type": "object",
+          "description": "Reading module stimulus passages and questions"
+        },
+        "writing": {
+          "type": "object",
+          "description": "Writing Task 1 and Task 2 prompts"
+        },
+        "assignedSessions": {
+          "type": "array",
+          "description": "List of scheduled exam session dates assigned to this package",
+          "items": { "type": "string" }
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Package creation timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Package last updated timestamp"
+        }
+      },
+      "required": ["id", "title", "module", "version", "status", "listening", "reading", "writing", "createdAt", "updatedAt"]
+    },
+    "ExamAnswerKey": {
+      "title": "ExamAnswerKey",
+      "description": "Confidential answer keys and examiner rubrics strictly restricted to administrators and examiners",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Key identifier matching packageId",
+          "maxLength": 128
+        },
+        "packageId": {
+          "type": "string",
+          "description": "Referenced exam package ID",
+          "maxLength": 128
+        },
+        "listeningKeys": {
+          "type": "object",
+          "description": "Correct answers and accepted spelling variants for Listening"
+        },
+        "readingKeys": {
+          "type": "object",
+          "description": "Correct answers for Reading"
+        },
+        "writingCriteria": {
+          "type": "object",
+          "description": "Examiner marking rubric checkpoints for Tasks 1 and 2"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Key last updated timestamp"
+        }
+      },
+      "required": ["id", "packageId", "listeningKeys", "readingKeys", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles for candidates and examiners"
+    },
+    "/bookings/{bookingId}": {
+      "schema": "Booking",
+      "description": "Offline test center seat reservations"
+    },
+    "/test_attempts/{attemptId}": {
+      "schema": "TestAttempt",
+      "description": "Student mock exam attempts and submissions"
+    },
+    "/diagnostic_trfs/{trfId}": {
+      "schema": "DiagnosticTRF",
+      "description": "Examiner-verified Test Report Forms with band diagnostics"
+    },
+    "/exam_resources/{resourceId}": {
+      "schema": "ExamResource",
+      "description": "Published and draft exam stimulus packages (listening, reading, writing)"
+    },
+    "/exam_answer_keys/{keyId}": {
+      "schema": "ExamAnswerKey",
+      "description": "Confidential answer keys accessible solely by administrators and certified examiners"
+    }
+  }
+}

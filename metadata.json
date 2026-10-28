@@ -1,0 +1,6 @@
+{
+  "name": "IELTS ZONE Mock Testing Platform",
+  "description": "Professional IELTS mock testing platform for computer-delivered online and supervised offline practice with detailed examiner feedback.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

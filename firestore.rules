@@ -1,0 +1,215 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Core Helper Functions ---
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == 'farhodjonovichm1301@gmail.com' ||
+        request.auth.token.admin == true ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function isStaff() {
+      return isSignedIn() && (
+        isAdmin() ||
+        request.auth.token.role in ['admin', 'examiner'] ||
+        exists(/databases/$(database)/documents/examiners/$(request.auth.uid))
+      );
+    }
+
+
+    // --- Entity Validation Functions ---
+    function isValidUser(data) {
+      return (data.keys().hasAll(['id', 'email', 'displayName', 'role', 'createdAt']) ||
+              data.keys().hasAll(['uid', 'email', 'displayName', 'role', 'createdAt'])) &&
+        data.keys().hasOnly(['id', 'uid', 'email', 'displayName', 'role', 'targetBand', 'createdAt', 'updatedAt']) &&
+        (!('id' in data) || (data.id is string && data.id == request.auth.uid)) &&
+        (!('uid' in data) || (data.uid is string && data.uid == request.auth.uid)) &&
+        data.email is string && data.email.size() <= 256 &&
+        data.displayName is string && data.displayName.size() > 0 && data.displayName.size() <= 120 &&
+        data.role in ['candidate', 'examiner', 'admin'] &&
+        (!('targetBand' in data) || (data.targetBand is string && data.targetBand.size() <= 10)) &&
+        data.createdAt is string;
+    }
+
+    function isValidBooking(data) {
+      return data.keys().hasAll(['id', 'candidateId', 'fullName', 'phone', 'email', 'module', 'preferredDate', 'referenceCode', 'status', 'createdAt']) &&
+        data.keys().hasOnly(['id', 'candidateId', 'fullName', 'phone', 'email', 'module', 'preferredDate', 'referenceCode', 'status', 'createdAt', 'notes']) &&
+        data.id is string && isValidId(data.id) &&
+        data.candidateId is string && data.candidateId == request.auth.uid &&
+        data.fullName is string && data.fullName.size() > 0 && data.fullName.size() <= 120 &&
+        data.phone is string && data.phone.size() > 0 && data.phone.size() <= 30 &&
+        data.email is string && data.email.size() <= 256 &&
+        data.module in ['Academic', 'General Training'] &&
+        data.preferredDate is string && data.preferredDate.size() <= 120 &&
+        data.referenceCode is string && data.referenceCode.size() <= 40 &&
+        data.status in ['confirmed', 'cancelled', 'completed'] &&
+        data.createdAt is string &&
+        (!('notes' in data) || (data.notes is string && data.notes.size() <= 500));
+    }
+
+    function isValidTestAttempt(data) {
+      return data.keys().hasAll(['id', 'candidateId', 'module', 'testType', 'status', 'createdAt']) &&
+        data.keys().hasOnly(['id', 'candidateId', 'module', 'testType', 'status', 'createdAt', 'answers', 'rawListeningScore', 'rawReadingScore', 'overallBand', 'completedAt']) &&
+        data.id is string && isValidId(data.id) &&
+        data.candidateId is string && data.candidateId == request.auth.uid &&
+        data.module in ['Academic', 'General Training'] &&
+        data.testType in ['online', 'offline'] &&
+        data.status in ['in_progress', 'completed', 'graded'] &&
+        data.createdAt is string;
+    }
+
+    function isValidDiagnosticTRF(data) {
+      return data.keys().hasAll(['id', 'attemptId', 'candidateId', 'overallBand', 'listeningBand', 'readingBand', 'writingBand', 'speakingBand', 'issuedAt']) &&
+        data.keys().hasOnly(['id', 'attemptId', 'candidateId', 'overallBand', 'listeningBand', 'readingBand', 'writingBand', 'speakingBand', 'writingFeedback', 'speakingFeedback', 'examinerEmail', 'issuedAt']) &&
+        data.id is string && isValidId(data.id) &&
+        data.attemptId is string && isValidId(data.attemptId) &&
+        data.candidateId is string && isValidId(data.candidateId) &&
+        data.overallBand is number && data.overallBand >= 0.0 && data.overallBand <= 9.0 &&
+        data.listeningBand is number && data.listeningBand >= 0.0 && data.listeningBand <= 9.0 &&
+        data.readingBand is number && data.readingBand >= 0.0 && data.readingBand <= 9.0 &&
+        data.writingBand is number && data.writingBand >= 0.0 && data.writingBand <= 9.0 &&
+        data.speakingBand is number && data.speakingBand >= 0.0 && data.speakingBand <= 9.0 &&
+        (!('writingFeedback' in data) || (data.writingFeedback is string && data.writingFeedback.size() <= 4000)) &&
+        (!('speakingFeedback' in data) || (data.speakingFeedback is string && data.speakingFeedback.size() <= 4000)) &&
+        (!('examinerEmail' in data) || (data.examinerEmail is string && data.examinerEmail.size() <= 256)) &&
+        data.issuedAt is string;
+    }
+
+    function isValidExamResource(data) {
+      return data.keys().hasAll(['id', 'title', 'module', 'version', 'status', 'createdAt', 'updatedAt', 'listening', 'reading', 'writing']) &&
+        data.id is string && isValidId(data.id) &&
+        data.title is string && data.title.size() > 0 && data.title.size() <= 200 &&
+        data.module in ['Academic', 'General Training'] &&
+        data.version is string && data.version.size() <= 40 &&
+        data.status in ['draft', 'review', 'published', 'archived'] &&
+        data.createdAt is string &&
+        data.updatedAt is string &&
+        !('answerKeys' in data) &&
+        !('answers' in data) &&
+        !('keys' in data) &&
+        !('correctAnswers' in data) &&
+        !('solution' in data);
+    }
+
+    function isValidExamAnswerKeys(data) {
+      return data.keys().hasAll(['id', 'packageId', 'listeningKeys', 'readingKeys', 'updatedAt']) &&
+        data.id is string && isValidId(data.id) &&
+        data.packageId is string && isValidId(data.packageId) &&
+        data.updatedAt is string;
+    }
+
+    // --- Users Collection ---
+    match /users/{userId} {
+      allow get: if isOwner(userId) || isStaff();
+      allow list: if isStaff();
+      allow create: if isOwner(userId) && isValidId(userId) && isValidUser(incoming()) && incoming().role == 'candidate';
+      allow update: if (
+        isOwner(userId) && isValidUser(incoming()) &&
+        incoming().role == existing().role && // prevent self-assigned role escalation
+        (!('id' in incoming()) || incoming().id == existing().id) &&
+        (!('uid' in incoming()) || incoming().uid == existing().uid) &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'targetBand', 'updatedAt'])
+      ) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // --- Bookings Collection ---
+    match /bookings/{bookingId} {
+      allow get: if isSignedIn() && (existing().candidateId == request.auth.uid || isStaff());
+      allow list: if isSignedIn() && (resource.data.candidateId == request.auth.uid || isStaff());
+      allow create: if isSignedIn() && isValidId(bookingId) && isValidBooking(incoming()) && incoming().candidateId == request.auth.uid;
+      allow update: if (
+        isSignedIn() && existing().candidateId == request.auth.uid &&
+        isValidBooking(incoming()) &&
+        incoming().candidateId == existing().candidateId &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['status', 'notes']) &&
+        (incoming().status == 'cancelled' || isStaff())
+      ) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // --- Test Attempts Collection ---
+    match /test_attempts/{attemptId} {
+      allow get: if isSignedIn() && (existing().candidateId == request.auth.uid || isStaff());
+      allow list: if isSignedIn() && (resource.data.candidateId == request.auth.uid || isStaff());
+      allow create: if isSignedIn() && isValidId(attemptId) && isValidTestAttempt(incoming()) && incoming().candidateId == request.auth.uid;
+      allow update: if (
+        isSignedIn() && existing().candidateId == request.auth.uid &&
+        isValidTestAttempt(incoming()) &&
+        existing().status == 'in_progress' && // lock updates once submitted
+        incoming().candidateId == existing().candidateId &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['answers', 'status', 'rawListeningScore', 'rawReadingScore', 'overallBand', 'completedAt'])
+      ) || isStaff();
+      allow delete: if isAdmin();
+    }
+
+    // --- Diagnostic TRF Collection ---
+    match /diagnostic_trfs/{trfId} {
+      allow get: if isSignedIn() && (existing().candidateId == request.auth.uid || isStaff());
+      allow list: if isSignedIn() && (resource.data.candidateId == request.auth.uid || isStaff());
+      allow create: if isStaff() && isValidId(trfId) && isValidDiagnosticTRF(incoming());
+      allow update: if isStaff() && isValidDiagnosticTRF(incoming());
+      allow delete: if isAdmin();
+    }
+
+    // --- Exam Resources Collection (Candidate Stimulus Materials & Prompts) ---
+    match /exam_resources/{resourceId} {
+      // Ordinary candidates can ONLY read published examination packages
+      // Elevated staff (examiners & admins) can read all (including drafts & archived)
+      allow get: if (isSignedIn() && existing().status == 'published') || isStaff();
+      allow list: if (isSignedIn() && resource.data.status == 'published') || isStaff();
+      // Authorized staff can create and update exam packages
+      allow create: if isStaff() && isValidId(resourceId) && isValidExamResource(incoming());
+      allow update: if isStaff() && isValidExamResource(incoming());
+      allow delete: if isAdmin();
+    }
+
+    // --- Confidential Exam Answer Keys Collection (Examiner & Admin ONLY) ---
+    match /exam_answer_keys/{keyId} {
+      // Strictly restricted: Candidates have NO read or write access
+      allow read: if isStaff() && isValidId(keyId);
+      allow write: if isStaff() && isValidId(keyId) && (request.method != 'create' || isValidExamAnswerKeys(incoming()));
+      allow delete: if isAdmin();
+    }
+
+    // --- Admins Collection ---
+    match /admins/{adminId} {
+      allow read, write: if isAdmin();
+    }
+
+    // --- Examiners Collection ---
+    match /examiners/{examinerId} {
+      allow read: if isStaff();
+      allow write: if isAdmin();
+    }
+  }
+}
