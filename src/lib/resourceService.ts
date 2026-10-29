@@ -5,7 +5,8 @@ import {
   getDoc,
   getDocs, 
   query, 
-  where 
+  where,
+  deleteDoc,
 } from 'firebase/firestore';
 import { db, auth, OperationType, handleFirestoreError } from './firebase';
 import firebaseConfig from '../../firebase-applet-config.json';
@@ -481,7 +482,7 @@ export async function deleteExamPackage(packageId: string): Promise<void> {
     throw new Error('The default IELTS simulation pack cannot be deleted.');
   }
 
-  const { deleteDoc } = await import('firebase/firestore');
+
   try {
     await deleteDoc(doc(db, EXAM_RESOURCES_COLLECTION, packageId));
     await deleteDoc(doc(db, EXAM_KEYS_COLLECTION, packageId)).catch(() => null);
