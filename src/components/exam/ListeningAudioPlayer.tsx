@@ -441,7 +441,7 @@ export const ListeningAudioPlayer: React.FC<ListeningAudioPlayerProps> = ({
         <div className="flex flex-wrap items-center gap-3 text-[11px] text-[#716A7B] dark:text-[#ABA1BC] bg-[#F7F7FB] dark:bg-[#130922] px-3.5 py-2 rounded-xl border border-[#E5E1EB] dark:border-[#361F5B]">
           <span className="flex items-center gap-1.5 font-medium">
             <FileAudio className="w-3.5 h-3.5 text-[#35145A] dark:text-[#8E54DC]" />
-            <span>Format: {metadata.storageType === 'firebase_storage' ? 'Firebase Cloud Audio' : 'WAV Master 44.1kHz'}</span>
+            <span>Format: {metadata.storageType === 'supabase_storage' ? 'Supabase Secure Audio' : metadata.storageType === 'firebase_storage' ? 'Firebase Cloud Audio' : 'WAV Master 44.1kHz'}</span>
           </span>
           {formatFileSize(metadata.fileSizeBytes) && (
             <>

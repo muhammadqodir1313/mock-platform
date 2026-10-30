@@ -301,7 +301,7 @@ export interface AudioMetadata {
   sectionsCount?: number;
   assignedSession?: string;
   isDevSample: boolean;
-  storageType: 'firebase_storage' | 'local_sample' | 'none';
+  storageType: 'firebase_storage' | 'supabase_storage' | 'local_sample' | 'none';
 }
 
 export interface AudioResolutionResult {
