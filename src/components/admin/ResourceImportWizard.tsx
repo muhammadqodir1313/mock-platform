@@ -38,7 +38,9 @@ import {
   validateAudioFile, 
   uploadExamAudio, 
   AudioUploadProgress,
-  createLocalAudioPreviewUrl 
+  createLocalAudioPreviewUrl,
+  validateImageFile,
+  uploadExamImage
 } from '../../lib/storageService';
 import { 
   saveExamPackage, 
@@ -78,6 +80,7 @@ export const ResourceImportWizard: React.FC<ResourceImportWizardProps> = ({
   const [audioSrc, setAudioSrc] = useState('/audio/ielts_listening_section1.wav');
   const [audioDuration, setAudioDuration] = useState(45);
   const [audioFormat, setAudioFormat] = useState('WAV');
+  const [localAudioPreview, setLocalAudioPreview] = useState<string | null>(null);
   const [audioUploadProgress, setAudioUploadProgress] = useState<AudioUploadProgress | null>(null);
   const [audioUploadError, setAudioUploadError] = useState<string | null>(null);
 
@@ -99,6 +102,10 @@ export const ResourceImportWizard: React.FC<ResourceImportWizardProps> = ({
   const [writingTask1ChartDesc, setWritingTask1ChartDesc] = useState(
     'Comparative bar chart illustrating four testing centers (Tashkent, Samarkand, London, Sydney) across 5 academic years.'
   );
+  const [chartFile, setChartFile] = useState<File | null>(null);
+  const [chartUploadProgress, setChartUploadProgress] = useState<AudioUploadProgress | null>(null);
+  const [chartUploadError, setChartUploadError] = useState<string | null>(null);
+  const [localChartPreview, setLocalChartPreview] = useState<string | null>(null);
   const [writingTask2Prompt, setWritingTask2Prompt] = useState(
     'Some people believe that artificial intelligence and computer-graded systems will eventually replace human language instructors in IELTS exam preparation. Others argue that human mentorship remains irreplaceable. Discuss both views and give your own opinion.'
   );
@@ -195,10 +202,11 @@ export const ResourceImportWizard: React.FC<ResourceImportWizardProps> = ({
       URL.revokeObjectURL(previewUrlRef.current);
     }
 
-    // Create immediate local object URL for previewing in browser
+    // Create immediate local object URL for previewing in browser only
+    // Invariant: Do NOT persist temporary blob: URL into permanent audioSrc
     const localUrl = createLocalAudioPreviewUrl(file);
     previewUrlRef.current = localUrl;
-    setAudioSrc(localUrl);
+    setLocalAudioPreview(localUrl);
   };
 
   // 2. Perform live upload if requested
@@ -214,6 +222,38 @@ export const ResourceImportWizard: React.FC<ResourceImportWizardProps> = ({
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Upload failed';
       setAudioUploadError(msg);
+    }
+  };
+
+  // 2b. Handle Task 1 Diagram Image Selection & Upload
+  const handleChartFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setChartUploadError(null);
+    const validation = validateImageFile(file);
+    if (!validation.isValid) {
+      setChartUploadError(validation.error || 'Invalid image file.');
+      return;
+    }
+    setChartFile(file);
+    if (localChartPreview) {
+      URL.revokeObjectURL(localChartPreview);
+    }
+    const previewUrl = URL.createObjectURL(file);
+    setLocalChartPreview(previewUrl);
+  };
+
+  const handleUploadChartToCloud = async () => {
+    if (!chartFile) return;
+    setChartUploadError(null);
+    try {
+      const result = await uploadExamImage(chartFile, packageId, 'writing_task1', (progress) => {
+        setChartUploadProgress(progress);
+      });
+      setWritingTask1ChartUrl(result.downloadUrl);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Image upload failed';
+      setChartUploadError(msg);
     }
   };
 
@@ -531,6 +571,16 @@ export const ResourceImportWizard: React.FC<ResourceImportWizardProps> = ({
                     )}
                   </div>
 
+                  {localAudioPreview && (
+                    <div className="p-2.5 rounded-lg bg-purple-50/50 dark:bg-[#26133E]/40 border border-[#8E54DC]/30 space-y-1">
+                      <div className="flex items-center justify-between text-[11px] text-[#35145A] dark:text-[#8E54DC] font-semibold">
+                        <span>Local Audio Audition Preview (In-Browser Only):</span>
+                        <span className="text-[10px] text-amber-700 dark:text-amber-400 font-normal">Not saved to candidate package until uploaded</span>
+                      </div>
+                      <audio controls src={localAudioPreview} className="w-full h-8" />
+                    </div>
+                  )}
+
                   {audioUploadProgress && (
                     <div className="space-y-1 pt-1">
                       <div className="flex justify-between text-[11px]">
@@ -694,14 +744,51 @@ export const ResourceImportWizard: React.FC<ResourceImportWizardProps> = ({
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                     <div>
                       <label className="block text-[11px] font-semibold text-[#716A7B] dark:text-[#ABA1BC] mb-1">
-                        Task 1 Diagram/Chart Image URL (Optional):
+                        Task 1 Diagram/Chart Image (PNG, JPEG, WebP - Max 10MB):
                       </label>
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                        <label className="px-3 py-1.5 rounded-lg border border-dashed border-[#8E54DC]/50 hover:border-[#8E54DC] bg-purple-50/40 dark:bg-[#26133E]/40 text-[#35145A] dark:text-[#8E54DC] font-semibold text-[11px] cursor-pointer flex items-center gap-1.5 transition-colors">
+                          <Upload className="w-3.5 h-3.5" />
+                          <span>{chartFile ? chartFile.name : 'Choose Diagram Image...'}</span>
+                          <input
+                            type="file"
+                            accept=".png,.jpg,.jpeg,.webp,.gif,image/*"
+                            onChange={handleChartFileChange}
+                            className="hidden"
+                          />
+                        </label>
+                        {chartFile && storageReady && (
+                          <button
+                            type="button"
+                            onClick={handleUploadChartToCloud}
+                            disabled={Boolean(chartUploadProgress && chartUploadProgress.status === 'uploading')}
+                            className="px-2.5 py-1 text-[11px] font-semibold rounded-lg bg-[#35145A] hover:bg-[#481B7A] dark:bg-[#8E54DC] text-white cursor-pointer disabled:opacity-50"
+                          >
+                            Upload Diagram
+                          </button>
+                        )}
+                      </div>
+                      {chartUploadError && (
+                        <p className="text-[10px] text-rose-600 dark:text-rose-400 mt-1">{chartUploadError}</p>
+                      )}
+                      {localChartPreview && (
+                        <div className="mt-1.5 flex items-center gap-2">
+                          <img
+                            src={localChartPreview}
+                            alt="Chart Preview"
+                            className="w-12 h-12 object-cover rounded border border-[#E5E1EB] dark:border-[#361F5B]"
+                          />
+                          <span className="text-[10px] text-[#716A7B] dark:text-[#ABA1BC]">
+                            Local Preview. Click &quot;Upload Diagram&quot; to commit permanent cloud URL.
+                          </span>
+                        </div>
+                      )}
                       <input
                         type="text"
                         value={writingTask1ChartUrl}
                         onChange={(e) => setWritingTask1ChartUrl(e.target.value)}
-                        placeholder="https://example.com/charts/task1_barchart.png"
-                        className="w-full px-3 py-1.5 text-xs rounded-xl border border-[#E5E1EB] dark:border-[#361F5B] bg-white dark:bg-[#1E0F36] text-[#211A2B] dark:text-[#F7F5FA]"
+                        placeholder="Permanent image URL (e.g. https://...)"
+                        className="w-full mt-1.5 px-3 py-1.5 text-xs rounded-xl border border-[#E5E1EB] dark:border-[#361F5B] bg-white dark:bg-[#1E0F36] text-[#211A2B] dark:text-[#F7F5FA] font-mono"
                       />
                     </div>
                     <div>

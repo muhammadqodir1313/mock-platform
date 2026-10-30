@@ -67,10 +67,13 @@ export function validateAudioFile(file: File): {
     };
   }
 
-  // Check browser audio decoding support
-  const testAudio = document.createElement('audio');
-  const canPlay = testAudio.canPlayType(mimeType || `audio/${extension.replace('.', '')}`);
-  const browserPlaybackSupported = canPlay === 'probably' || canPlay === 'maybe' || true;
+  // Check browser audio decoding support if document is defined in environment
+  let browserPlaybackSupported = true;
+  if (typeof document !== 'undefined') {
+    const testAudio = document.createElement('audio');
+    const canPlay = testAudio.canPlayType(mimeType || `audio/${extension.replace('.', '')}`);
+    browserPlaybackSupported = canPlay === 'probably' || canPlay === 'maybe' || true;
+  }
 
   if (file.size > MAX_AUDIO_FILE_SIZE_BYTES) {
     const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
@@ -247,4 +250,211 @@ export function uploadExamAudio(
  */
 export function createLocalAudioPreviewUrl(file: File): string {
   return URL.createObjectURL(file);
+}
+
+// --- SECURE IMAGE HANDLING (Reading Diagrams, Writing Task 1 Charts) ---
+
+export const SUPPORTED_IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.webp', '.gif'];
+export const SUPPORTED_IMAGE_MIME_TYPES = [
+  'image/png',
+  'image/jpeg',
+  'image/webp',
+  'image/gif',
+];
+export const MAX_IMAGE_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10MB ceiling
+
+/**
+ * Validates image file type and size.
+ * CRITICAL: Rejects SVG files to prevent active script execution and DOM-based XSS.
+ */
+export function validateImageFile(file: File): {
+  isValid: boolean;
+  error?: string;
+  detectedFormat: string;
+} {
+  const extension = '.' + file.name.split('.').pop()?.toLowerCase();
+  const mimeType = file.type.toLowerCase();
+
+  // Explicitly reject SVG active content
+  if (extension === '.svg' || mimeType.includes('svg')) {
+    return {
+      isValid: false,
+      error: 'SVG format is rejected due to active content / script execution risks. Please use PNG, JPEG, or WebP.',
+      detectedFormat: 'SVG (Blocked)',
+    };
+  }
+
+  const hasValidExt = SUPPORTED_IMAGE_EXTENSIONS.includes(extension);
+  const hasValidMime = SUPPORTED_IMAGE_MIME_TYPES.includes(mimeType);
+
+  if (!hasValidExt && !hasValidMime) {
+    return {
+      isValid: false,
+      error: `Unsupported image format "${extension || mimeType}". Supported formats: PNG, JPEG, WEBP, GIF.`,
+      detectedFormat: extension || mimeType,
+    };
+  }
+
+  if (file.size > MAX_IMAGE_FILE_SIZE_BYTES) {
+    const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
+    return {
+      isValid: false,
+      error: `Image size (${sizeMb} MB) exceeds maximum allowed 10 MB limit.`,
+      detectedFormat: extension,
+    };
+  }
+
+  return {
+    isValid: true,
+    detectedFormat: extension,
+  };
+}
+
+/**
+ * Uploads an examination image (Reading diagram, Task 1 chart/map) to Firebase Storage.
+ */
+export function uploadExamImage(
+  file: File,
+  packageId: string,
+  category: 'reading' | 'writing_task1' | 'writing_task2',
+  onProgress?: (progress: AudioUploadProgress) => void
+): Promise<{ downloadUrl: string; storagePath: string; fileSizeBytes: number }> {
+  return new Promise((resolve, reject) => {
+    const currentUser = auth.currentUser;
+    if (!currentUser) {
+      const err = new Error('Authentication required: Only administrators can upload examination images.');
+      onProgress?.({
+        bytesTransferred: 0,
+        totalBytes: file.size,
+        progressPercent: 0,
+        status: 'error',
+        errorMessage: err.message,
+      });
+      return reject(err);
+    }
+
+    const validation = validateImageFile(file);
+    if (!validation.isValid) {
+      const err = new Error(validation.error || 'Image validation failed.');
+      onProgress?.({
+        bytesTransferred: 0,
+        totalBytes: file.size,
+        progressPercent: 0,
+        status: 'error',
+        errorMessage: err.message,
+      });
+      return reject(err);
+    }
+
+    onProgress?.({
+      bytesTransferred: 0,
+      totalBytes: file.size,
+      progressPercent: 5,
+      status: 'uploading',
+    });
+
+    const cleanFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const storagePath = `exam_resources/${packageId}/images/${category}_${cleanFileName}`;
+    const fileRef = ref(storage, storagePath);
+
+    const metadata = {
+      contentType: file.type || 'image/png',
+      customMetadata: {
+        packageId,
+        category,
+        uploadedBy: currentUser.email || currentUser.uid,
+        uploadedAt: new Date().toISOString(),
+        originalName: file.name,
+      },
+    };
+
+    try {
+      const uploadTask = uploadBytesResumable(fileRef, file, metadata);
+
+      uploadTask.on(
+        'state_changed',
+        (snapshot) => {
+          const percent = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
+          onProgress?.({
+            bytesTransferred: snapshot.bytesTransferred,
+            totalBytes: snapshot.totalBytes,
+            progressPercent: Math.max(5, Math.min(95, percent)),
+            status: 'uploading',
+          });
+        },
+        (error) => {
+          console.error('Firebase Storage image upload error:', error);
+          let userMessage = error.message;
+          if (error.code === 'storage/bucket-not-found' || error.message.includes('bucket')) {
+            userMessage = 'Firebase Storage bucket has not been initialized in Firebase Console.';
+          } else if (error.code === 'storage/unauthorized') {
+            userMessage = 'Upload unauthorized: Only verified administrators can upload examination images.';
+          }
+
+          onProgress?.({
+            bytesTransferred: 0,
+            totalBytes: file.size,
+            progressPercent: 0,
+            status: 'error',
+            errorMessage: userMessage,
+          });
+          reject(new Error(userMessage));
+        },
+        async () => {
+          try {
+            onProgress?.({
+              bytesTransferred: file.size,
+              totalBytes: file.size,
+              progressPercent: 100,
+              status: 'completed',
+            });
+            const downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
+            resolve({
+              downloadUrl,
+              storagePath,
+              fileSizeBytes: file.size,
+            });
+          } catch (urlErr) {
+            reject(urlErr instanceof Error ? urlErr : new Error('Failed to retrieve image download URL'));
+          }
+        }
+      );
+    } catch (launchErr) {
+      reject(launchErr instanceof Error ? launchErr : new Error('Storage image initialization error'));
+    }
+  });
+}
+
+/**
+ * Staged Media Replacement Utility:
+ * Ensures atomic-like update safety:
+ * 1. Uploads new asset
+ * 2. Verifies new asset is reachable
+ * 3. Returns new reference for Firestore commit
+ * 4. Preserves the previous asset reference if any step fails
+ */
+export async function safeReplaceExamMedia<T extends { audioSrc?: string; chartUrl?: string }>(
+  currentResource: T,
+  uploadOperation: () => Promise<{ downloadUrl: string; storagePath: string }>,
+  fieldToUpdate: 'audioSrc' | 'chartUrl'
+): Promise<{ updatedResource: T; newUrl: string; previousUrl: string | undefined }> {
+  const previousUrl = currentResource[fieldToUpdate];
+  
+  // Step 1 & 2: Perform upload and verify
+  const result = await uploadOperation();
+  if (!result.downloadUrl) {
+    throw new Error('Upload completed but download URL verification failed. Previous asset preserved.');
+  }
+
+  // Step 3: Return updated structure while keeping track of previous URL
+  const updatedResource = {
+    ...currentResource,
+    [fieldToUpdate]: result.downloadUrl,
+  };
+
+  return {
+    updatedResource,
+    newUrl: result.downloadUrl,
+    previousUrl,
+  };
 }

@@ -46,8 +46,11 @@ import { DEFAULT_EXAM_KEYS } from '../../lib/adminExamKeys';
 
 import { ResourcePreviewModal } from './ResourcePreviewModal';
 import { ResourceImportWizard } from './ResourceImportWizard';
+import { useAuth } from '../../context/AuthContext';
 
 export const ResourceManager: React.FC = () => {
+  const { profile } = useAuth();
+  const isAdmin = profile?.role === 'admin';
   const [packages, setPackages] = useState<ExamResourcePackage[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedPackage, setSelectedPackage] = useState<ExamResourcePackage | null>(null);
@@ -161,6 +164,10 @@ export const ResourceManager: React.FC = () => {
   };
 
   const handleDeletePackage = async (pkg: ExamResourcePackage) => {
+    if (!isAdmin) {
+      setActionNotice('Only platform administrators can delete packages. Examiners may archive packages.');
+      return;
+    }
     if (pkg.id === DEFAULT_EXAM_PACKAGE.id) {
       setActionNotice('Cannot delete the default simulation pack.');
       return;
@@ -655,11 +662,11 @@ export const ResourceManager: React.FC = () => {
                   )
                 )}
 
-                {pkg.id !== DEFAULT_EXAM_PACKAGE.id && (
+                {isAdmin && pkg.id !== DEFAULT_EXAM_PACKAGE.id && (
                   <button
                     onClick={() => handleDeletePackage(pkg)}
                     className="p-1.5 text-rose-600 hover:text-rose-800 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-colors cursor-pointer"
-                    title="Delete package"
+                    title="Delete package (Admin Only)"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>

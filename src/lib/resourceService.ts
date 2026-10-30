@@ -194,6 +194,17 @@ export async function saveExamPackage(
 
   inFlightSaves.add(pkg.id);
   try {
+    if (pkg.listening?.audioSrc?.startsWith('blob:')) {
+      throw new Error(
+        'Cannot save package with temporary browser "blob:" audio URL. Audio must be uploaded to Firebase Storage or reference a permanent asset.'
+      );
+    }
+    if (pkg.writing?.task1?.chartUrl?.startsWith('blob:')) {
+      throw new Error(
+        'Cannot save package with temporary browser "blob:" diagram URL. Diagram must be uploaded to Firebase Storage or reference a permanent asset.'
+      );
+    }
+
     const validation = validateExamPackage(pkg, keys);
     if (!validation.isValid && pkg.status === 'published') {
       throw new Error(`Cannot publish package: ${validation.errorCount} validation error(s) detected.`);
@@ -550,7 +561,7 @@ service firebase.storage {
         request.auth.token.admin == true ||
         firestore.exists(/databases/(default)/documents/admins/$(request.auth.uid)) ||
         firestore.exists(/databases/(default)/documents/examiners/$(request.auth.uid)) ||
-        request.auth.token.email == 'farhodjonovichm1301@gmail.com'
+        (request.auth.token.email == 'farhodjonovichm1301@gmail.com' && request.auth.token.email_verified == true)
       );
     }
 

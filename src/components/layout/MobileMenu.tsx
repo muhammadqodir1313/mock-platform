@@ -26,8 +26,7 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
   const isStaff = Boolean(
     user && (
       profile?.role === 'admin' ||
-      profile?.role === 'examiner' ||
-      user.email === 'farhodjonovichm1301@gmail.com'
+      profile?.role === 'examiner'
     )
   );
 

@@ -1104,8 +1104,7 @@ export const PlaceholderRouteView: React.FC<PlaceholderRouteViewProps> = ({
     const isAuthorized = Boolean(
       user && (
         profile?.role === 'admin' ||
-        profile?.role === 'examiner' ||
-        user.email === 'farhodjonovichm1301@gmail.com'
+        profile?.role === 'examiner'
       )
     );
 

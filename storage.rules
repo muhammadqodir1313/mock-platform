@@ -19,7 +19,7 @@ service firebase.storage {
         request.auth.token.admin == true ||
         firestore.exists(/databases/(default)/documents/admins/$(request.auth.uid)) ||
         firestore.exists(/databases/(default)/documents/examiners/$(request.auth.uid)) ||
-        request.auth.token.email == 'farhodjonovichm1301@gmail.com'
+        (request.auth.token.email == 'farhodjonovichm1301@gmail.com' && request.auth.token.email_verified == true)
       );
     }
 
@@ -35,11 +35,13 @@ service firebase.storage {
       allow read, write: if isStaff();
     }
 
-    // 3. Published Examination Audio & Stimulus Media
-    // Authenticated candidates may only read audio assets belonging to a published exam package
-    match /exam_resources/{packageId}/{fileName} {
-      // Authorized staff can upload, modify, or delete media
-      allow write: if isStaff();
+    // 3. Examination Audio, Stimulus Media & Task 1 Diagrams
+    // Authenticated candidates may only read assets belonging to a published exam package
+    match /exam_resources/{packageId}/{allPaths=**} {
+      // Authorized staff can upload media (Max 50MB, active SVG execution blocked)
+      allow write: if isStaff() &&
+        request.resource.size < 50 * 1024 * 1024 &&
+        request.resource.contentType != 'image/svg+xml';
       
       // Candidate read access is strictly conditional on the exam package status in Cloud Firestore
       allow read: if isStaff() || (

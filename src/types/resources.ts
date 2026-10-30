@@ -147,13 +147,17 @@ export function validateExamPackage(
   });
 
   // 2. Listening checks
-  const hasAudioSrc = Boolean(pkg.listening?.audioSrc && pkg.listening.audioSrc.trim());
+  const rawAudioSrc = pkg.listening?.audioSrc?.trim() || '';
+  const isBlobAudio = rawAudioSrc.startsWith('blob:');
+  const hasAudioSrc = Boolean(rawAudioSrc) && !isBlobAudio;
   checks.push({
     id: 'listening-audio-src',
     label: 'Listening Audio Asset Path / URL',
     passed: hasAudioSrc,
     severity: 'error',
-    message: hasAudioSrc ? `Audio source configured: ${pkg.listening.audioSrc}` : 'Listening audio file URL or asset path is missing.',
+    message: isBlobAudio
+      ? 'Security / Persistence Error: Temporary browser blob: URL detected. Permanent Firebase Storage URL or asset path required.'
+      : (hasAudioSrc ? `Audio source configured: ${pkg.listening.audioSrc}` : 'Listening audio file URL or asset path is missing.'),
   });
 
   const validDuration = (pkg.listening?.durationSeconds || 0) > 0;
@@ -220,6 +224,27 @@ export function validateExamPackage(
     severity: 'error',
     message: task2Valid ? 'Task 2 meets IELTS specifications (≥250 words requirement).' : 'Task 2 prompt missing or minimum words < 250.',
   });
+
+  const chartUrl = pkg.writing?.task1?.chartUrl?.trim() || '';
+  const isBlobChart = chartUrl.startsWith('blob:');
+  const isSvgChart = chartUrl.endsWith('.svg') || chartUrl.includes('image/svg');
+  const isUnsafeScheme = chartUrl.startsWith('javascript:') || chartUrl.startsWith('vbscript:');
+
+  if (chartUrl) {
+    checks.push({
+      id: 'writing-task1-chart-security',
+      label: 'Task 1 Diagram Security',
+      passed: !isBlobChart && !isSvgChart && !isUnsafeScheme,
+      severity: 'error',
+      message: isBlobChart
+        ? 'Temporary browser blob: URL detected for Task 1 diagram. Permanent storage URL required.'
+        : isSvgChart
+        ? 'SVG format rejected for Task 1 diagram due to active script execution risks. Use PNG, JPEG, or WebP.'
+        : isUnsafeScheme
+        ? 'Unsafe URL scheme detected in diagram URL.'
+        : 'Task 1 diagram reference validated.',
+    });
+  }
 
   // 5. Security & Answer Key Isolation checks
   // Candidate package must NOT contain answer key fields directly or inside question items

@@ -91,8 +91,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const userDocRef = doc(db, 'users', currentUser.uid);
         try {
           const docSnap = await getDoc(userDocRef);
+          let loadedProfile: UserProfile | null = null;
           if (docSnap.exists()) {
-            setProfile(docSnap.data() as UserProfile);
+            loadedProfile = docSnap.data() as UserProfile;
           } else {
             // Self-registration is strictly restricted to candidate role
             const newProfile: UserProfile = {
@@ -100,13 +101,55 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               uid: currentUser.uid,
               email: currentUser.email || '',
               displayName: currentUser.displayName || 'Candidate',
-              role: 'candidate', // strict security invariant: never admin
+              role: 'candidate', // strict security invariant: never admin on client
               targetBand: '7.5',
               createdAt: new Date().toISOString(),
             };
             await setDoc(userDocRef, newProfile);
-            setProfile(newProfile);
+            loadedProfile = newProfile;
           }
+
+          // Authoritative Role Resolution:
+          // 1. Check if user document exists in admins/{uid}
+          // 2. Or root project owner with strictly verified email
+          // 3. Check if user document exists in examiners/{uid}
+          try {
+            const isOwnerEmailVerified = Boolean(
+              currentUser.email === 'farhodjonovichm1301@gmail.com' &&
+              currentUser.emailVerified
+            );
+
+            const adminDocSnap = await getDoc(doc(db, 'admins', currentUser.uid));
+            if (adminDocSnap.exists() || isOwnerEmailVerified) {
+              if (loadedProfile && loadedProfile.role !== 'admin') {
+                loadedProfile = { ...loadedProfile, role: 'admin' };
+              }
+              // If owner has verified email and admin document isn't written yet, establish administrative record
+              if (isOwnerEmailVerified && !adminDocSnap.exists()) {
+                try {
+                  await setDoc(doc(db, 'admins', currentUser.uid), {
+                    uid: currentUser.uid,
+                    email: currentUser.email,
+                    promotedAt: new Date().toISOString(),
+                    promotedBy: 'system_root_bootstrap',
+                  });
+                } catch {
+                  // Non-fatal if rules prevent or already created
+                }
+              }
+            } else {
+              const examinerDocSnap = await getDoc(doc(db, 'examiners', currentUser.uid));
+              if (examinerDocSnap.exists()) {
+                if (loadedProfile && loadedProfile.role !== 'examiner') {
+                  loadedProfile = { ...loadedProfile, role: 'examiner' };
+                }
+              }
+            }
+          } catch {
+            // Non-fatal role verification fallback
+          }
+
+          setProfile(loadedProfile);
         } catch (error) {
           handleFirestoreError(error, OperationType.GET, `users/${currentUser.uid}`);
         }

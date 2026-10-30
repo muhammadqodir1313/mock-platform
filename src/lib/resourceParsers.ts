@@ -4,6 +4,7 @@ import {
   QuestionType,
   WritingTask 
 } from '../types/resources';
+import { sanitizeIeltsHtml } from './sanitizer';
 
 /**
  * Parses audio file in browser to measure exact duration (seconds) and format.
@@ -59,14 +60,17 @@ export function parseReadingSingleFile(text: string): ReadingPassage[] {
     try {
       const parsed = JSON.parse(trimmed);
       const list = Array.isArray(parsed) ? parsed : (parsed.passages || [parsed]);
-      return list.map((item: any, idx: number) => ({
-        id: item.id || `r_passage_0${idx + 1}`,
-        passageNumber: item.passageNumber || idx + 1,
-        title: item.title || `Reading Passage ${idx + 1}`,
-        subtitle: item.subtitle,
-        body: item.body || item.content || item.text || '',
-        wordCount: item.body ? item.body.split(/\s+/).filter(Boolean).length : undefined,
-      }));
+      return list.map((item: any, idx: number) => {
+        const cleanBody = sanitizeIeltsHtml(item.body || item.content || item.text || '');
+        return {
+          id: item.id || `r_passage_0${idx + 1}`,
+          passageNumber: item.passageNumber || idx + 1,
+          title: item.title || `Reading Passage ${idx + 1}`,
+          subtitle: item.subtitle,
+          body: cleanBody,
+          wordCount: cleanBody ? cleanBody.split(/\s+/).filter(Boolean).length : undefined,
+        };
+      });
     } catch {
       // Fall through to text delimiter parsing
     }
@@ -90,7 +94,7 @@ export function parseReadingSingleFile(text: string): ReadingPassage[] {
       const lines = rawBody.split('\n');
       const firstLine = lines[0]?.replace(/^[#\s*-]+/, '').trim();
       const title = firstLine && firstLine.length < 100 ? firstLine : `Reading Passage ${passageNum}`;
-      const body = firstLine && firstLine.length < 100 ? lines.slice(1).join('\n').trim() : rawBody;
+      const body = sanitizeIeltsHtml(firstLine && firstLine.length < 100 ? lines.slice(1).join('\n').trim() : rawBody);
 
       passages.push({
         id: `r_passage_0${passageNum}`,
@@ -105,13 +109,14 @@ export function parseReadingSingleFile(text: string): ReadingPassage[] {
 
   // 3. Fallback: Entire text is single passage
   const firstLine = trimmed.split('\n')[0]?.replace(/^[#\s*-]+/, '').trim() || 'Reading Passage 1';
+  const cleanBody = sanitizeIeltsHtml(trimmed);
   return [
     {
       id: 'r_passage_01',
       passageNumber: 1,
       title: firstLine.length < 80 ? firstLine : 'Reading Passage 1',
-      body: trimmed,
-      wordCount: trimmed.split(/\s+/).filter(Boolean).length,
+      body: cleanBody,
+      wordCount: cleanBody.split(/\s+/).filter(Boolean).length,
     },
   ];
 }
@@ -134,7 +139,8 @@ export function parseReadingSeparateFiles(
     const trimmed = item.content.trim();
     const firstLine = trimmed.split('\n')[0]?.replace(/^[#\s*-]+/, '').trim() || '';
     const title = firstLine && firstLine.length < 80 ? firstLine : `Reading Passage ${passageNumber}`;
-    const body = firstLine && firstLine.length < 80 ? trimmed.split('\n').slice(1).join('\n').trim() : trimmed;
+    const rawBody = firstLine && firstLine.length < 80 ? trimmed.split('\n').slice(1).join('\n').trim() : trimmed;
+    const body = sanitizeIeltsHtml(rawBody);
 
     return {
       id: `r_passage_0${passageNumber}`,
@@ -171,7 +177,7 @@ export function parseQuestionsData(
           id: qId,
           number: num,
           type,
-          prompt: q.prompt || q.question || '',
+          prompt: sanitizeIeltsHtml(q.prompt || q.question || ''),
           options: q.options,
           placeholder: q.placeholder,
           sectionNumber: moduleContext === 'listening' ? (q.sectionNumber || 1) : undefined,
@@ -215,7 +221,7 @@ export function parseQuestionsData(
         id: qId,
         number: num,
         type: 'note_completion',
-        prompt,
+        prompt: sanitizeIeltsHtml(prompt),
         sectionNumber: moduleContext === 'listening' ? 1 : undefined,
         passageNumber: moduleContext === 'reading' ? 1 : undefined,
       });

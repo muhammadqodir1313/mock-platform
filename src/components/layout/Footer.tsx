@@ -18,8 +18,7 @@ export const Footer: React.FC<FooterProps> = ({
   const isStaff = Boolean(
     user && (
       profile?.role === 'admin' ||
-      profile?.role === 'examiner' ||
-      user.email === 'farhodjonovichm1301@gmail.com'
+      profile?.role === 'examiner'
     )
   );
   return (
